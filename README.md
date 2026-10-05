@@ -56,6 +56,16 @@ dotnet fsharp-analyzers \
 
 The tool exits nonzero on any Error-severity message, so `NOCOMMENT001`/`NOCOMMENT003` fail the build and `NOCOMMENT002` does not. For MSBuild-integrated runs see the [SDK's MSBuild docs](https://ionide.io/FSharp.Analyzers.SDK/content/getting-started/MSBuild.html); with `GeneratePathProperty="true"` on the package reference the analyzers path is `$(PkgScowalt_NoCommentsAnalyzer)/analyzers/dotnet/fs`.
 
+## Mechanical stripping
+
+`src/CommentStripper` is the sweep companion: a console tool that deletes every comment the analyzer would report as `NOCOMMENT001`, sharing the analyzer's detection, config discovery, and exemption logic so the two can never disagree. Directives, suppressions, generated files, and shebangs survive; comment-only lines are deleted, trailing comments are trimmed, and token separation is preserved. Run your repo formatter afterwards to normalize spacing.
+
+```sh
+dotnet run --project src/CommentStripper -c Release -- /path/to/repo/src /path/to/repo/scripts
+```
+
+It accepts files or directories (recursing into them, skipping `obj`, `bin`, `node_modules`, and `.git`), rewrites files in place, and exits nonzero if any `no-comments.json` on the walk is invalid.
+
 ## Development
 
 ```sh

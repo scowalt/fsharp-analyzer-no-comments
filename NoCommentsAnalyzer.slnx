@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/CommentStripper/CommentStripper.fsproj" />
     <Project Path="src/NoCommentsAnalyzer/NoCommentsAnalyzer.fsproj" />
   </Folder>
   <Folder Name="/tests/">

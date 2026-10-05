@@ -72,18 +72,31 @@ let private suppressionInUseMessage (comment: Detection.LogicalComment) =
       Range = comment.Range
       Fixes = [] }
 
-let analyze (fileName: string) (sourceText: ISourceText) (ast: ParsedInput) : Message list =
+type CommentVerdict =
+    | Banned
+    | Suppression
+    | Directive
+
+type ClassifiedComment =
+    { Comment: Detection.LogicalComment
+      Verdict: CommentVerdict }
+
+type FileClassification =
+    { ConfigError: string option
+      FileExempt: bool
+      Comments: ClassifiedComment list }
+
+let classify (fileName: string) (sourceText: ISourceText) (ast: ParsedInput) : FileClassification =
     let config = Config.load fileName
-
-    let configMessages =
-        match config.Error with
-        | Some reason -> [ invalidConfigMessage fileName reason ]
-        | None -> []
-
     let globPath = pathForGlobs config fileName
 
+    let exempt =
+        { ConfigError = config.Error
+          FileExempt = true
+          Comments = [] }
+
     if config.GeneratedGlobs |> List.exists (fun glob -> Glob.isMatch glob globPath) then
-        configMessages
+        exempt
     else
         let fileComments = Detection.collect fileName sourceText ast
 
@@ -97,25 +110,47 @@ let analyze (fileName: string) (sourceText: ISourceText) (ast: ParsedInput) : Me
             |> List.exists (fun comment -> isHeaderComment comment && containsGeneratedMarker comment.Text)
 
         if isGeneratedFile then
-            configMessages
+            exempt
         else
-            let commentMessages =
+            let classified =
                 fileComments.Comments
-                |> List.choose (fun comment ->
+                |> List.map (fun comment ->
                     let body = (commentBody comment.Text).TrimStart()
 
-                    let isSuppression =
-                        body.StartsWith("fsharpanalyzer:", StringComparison.Ordinal)
+                    let verdict =
+                        if body.StartsWith("fsharpanalyzer:", StringComparison.Ordinal) then
+                            Suppression
+                        elif
+                            config.DirectivePrefixes
+                            |> List.exists (fun prefix -> body.StartsWith(prefix, StringComparison.Ordinal))
+                        then
+                            Directive
+                        else
+                            Banned
 
-                    let isDirective =
-                        config.DirectivePrefixes
-                        |> List.exists (fun prefix -> body.StartsWith(prefix, StringComparison.Ordinal))
+                    { Comment = comment; Verdict = verdict })
 
-                    if isSuppression then Some(suppressionInUseMessage comment)
-                    elif isDirective then None
-                    else Some(commentBannedMessage comment))
+            { ConfigError = config.Error
+              FileExempt = false
+              Comments = classified }
 
-            configMessages @ commentMessages
+let analyze (fileName: string) (sourceText: ISourceText) (ast: ParsedInput) : Message list =
+    let classification = classify fileName sourceText ast
+
+    let configMessages =
+        match classification.ConfigError with
+        | Some reason -> [ invalidConfigMessage fileName reason ]
+        | None -> []
+
+    let commentMessages =
+        classification.Comments
+        |> List.choose (fun classified ->
+            match classified.Verdict with
+            | Suppression -> Some(suppressionInUseMessage classified.Comment)
+            | Directive -> None
+            | Banned -> Some(commentBannedMessage classified.Comment))
+
+    configMessages @ commentMessages
 
 [<Literal>]
 let private AnalyzerName = "NoCommentsAnalyzer"
