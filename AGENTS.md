@@ -1,5 +1,9 @@
 # Agent Instructions
 
+## No code comments
+
+This repo enforces its own policy on itself: never write comments in F# source, including `///` doc comments. Encode knowledge in names, types, tests, docs, or commit messages. The only exempt comments are machine-read directives (baseline prefix `fsharpanalyzer:`), generated-file markers, and shebangs. `./scripts/smoke-test.sh` runs the analyzer against this repo's own source and must report zero violations.
+
 ## Agent skills
 
 ### Issue tracker
